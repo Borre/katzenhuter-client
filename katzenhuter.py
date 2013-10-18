@@ -3,6 +3,7 @@
 import os
 import logging
 import pika
+import subprocess
 
 #before anything we need to aks things
 machine_name = raw_input("Enter machine name: ")
@@ -11,7 +12,8 @@ internal_password = os.urandom(45).encode('base64')
 external_password = os.urandom(45).encode('base64')
 
 #defining queue
-queue = "katzenhuter_" + machine_name
+queueClient = "katzenhuter_" + machine_name + "_client"
+queueServer = "katzenhuter_" + machine_name + "_server"
 
 #defining logging
 logging.basicConfig()
@@ -26,7 +28,8 @@ rabbit_connectionParameters = pika.ConnectionParameters(
 rabbit_connection = pika.BlockingConnection(rabbit_connectionParameters)
 
 rabbit_chanel = rabbit_connection.channel()
-rabbit_chanel.queue_declare(queue=queue, durable=True)
+rabbit_chanel.queue_declare(queue=queueClient, durable=True)
+rabbit_chanel.queue_declare(queue=queueServer, durable=True)
 
 print("Katzenhuter watching \n" +
       "machine name: " + machine_name + "\n"
@@ -35,20 +38,24 @@ print("Katzenhuter watching \n" +
 
 
 def send_to_monitor(message):
+    print(message)
     rabbit_chanel.basic_publish(
         exchange='',
-        routing_key=queue,
+        routing_key=queueServer,
         body=message
     )
 
 
 def get_orders_from_monitor(chanel, method, properties, body):
     print("[x] Received %r" % (body,))
+    process = subprocess.Popen(body, stdout=subprocess.PIPE, stderr=None, shell=True)
+    output = process.communicate()
+    send_to_monitor(body + output[0])
 
 
 rabbit_chanel.basic_consume(
     get_orders_from_monitor,
-    queue=queue,
+    queue=queueClient,
     no_ack=True
 )
 
